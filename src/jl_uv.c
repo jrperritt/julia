@@ -351,6 +351,8 @@ DLLEXPORT void jl_uv_writecb(uv_write_t *req, int status)
 static void jl_write(uv_stream_t *stream, const char *str, size_t n)
 {
     assert(stream);
+    _Static_assert(offsetof(uv_stream_t,type) == offsetof(ios_t,bm),
+	   "UV and ios layout mismatch");
 
     uv_file fd = 0;
 
