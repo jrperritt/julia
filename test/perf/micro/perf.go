@@ -1,7 +1,7 @@
-//The go.matrix and GoStats packages must be installed
-//To install the go.matrix package, run:
-//    go get github.com/skelterjohn/go.matrix
-//    go install github.com/skelterjohn/go.matrix
+//The matrix and stat packages must be installed
+//To install the matrix package, run:
+//    go get github.com/gonum/matrix/mat64
+//    go install github.com/gonum/matrix/mat64
 //To install the GoStats package, run:
 //    go get github.com/GaryBoone/GoStats/stats
 //    go install github.com/GaryBoone/GoStats/stats
@@ -10,13 +10,14 @@ package main
 
 import (
 	"fmt"
-	matrix "github.com/skelterjohn/go.matrix"
-	stats "github.com/GaryBoone/GoStats/stats"
 	"math"
 	"math/cmplx"
 	"math/rand"
 	"strconv"
 	"time"
+
+	stats "github.com/GaryBoone/GoStats/stats"
+	matrix "github.com/gonum/matrix/mat64"
 )
 
 // fibonacci
@@ -37,15 +38,15 @@ func qsort_kernel(a []float64, lo, hi int) []float64 {
 		pivot := a[(lo+hi)/2]
 		for i <= j {
 			for a[i] < pivot {
-				i += 1
+				i++
 			}
 			for a[j] > pivot {
-				j -= 1
+				j--
 			}
 			if i <= j {
 				a[i], a[j] = a[j], a[i]
-				i += 1
-				j -= 1
+				i++
+				j--
 			}
 		}
 		if lo < j {
@@ -63,11 +64,11 @@ func randmatstat(t int) (float64, float64) {
 	n := 5
 	var v stats.Stats
 	var w stats.Stats
-	for i :=0; i<t; i++ {
-		a := matrix.Zeros(n, n)
-		b := matrix.Zeros(n, n)
-		c := matrix.Zeros(n, n)
-		d := matrix.Zeros(n, n)
+	for i := 0; i < t; i++ {
+		a := matrix.NewDense(n, n, nil)
+		b := matrix.NewDense(n, n, nil)
+		c := matrix.NewDense(n, n, nil)
+		d := matrix.NewDense(n, n, nil)
 		for j := 0; j < n; j++ {
 			for k := 0; k < n; k++ {
 				a.Set(j, k, rand.NormFloat64())
@@ -76,48 +77,55 @@ func randmatstat(t int) (float64, float64) {
 				d.Set(j, k, rand.NormFloat64())
 			}
 		}
-		P := matrix.Zeros(n, 4*n)
+		P := matrix.NewDense(n, 4*n, nil)
 		for j := 0; j < n; j++ {
 			for k := 0; k < n; k++ {
-				P.Set(j,     k, a.Get(j, k))
-				P.Set(j,   n+k, b.Get(j, k))
-				P.Set(j, 2*n+k, c.Get(j, k))
-				P.Set(j, 3*n+k, d.Get(j, k))
+				P.Set(j, k, a.At(j, k))
+				P.Set(j, n+k, b.At(j, k))
+				P.Set(j, 2*n+k, c.At(j, k))
+				P.Set(j, 3*n+k, d.At(j, k))
 			}
 		}
-		Q := matrix.Zeros(2*n, 2*n)
+		Q := matrix.NewDense(2*n, 2*n, nil)
 		for j := 0; j < n; j++ {
 			for k := 0; k < n; k++ {
-				Q.Set(j,     k, a.Get(j, k))
-				Q.Set(j,   n+k, b.Get(j, k))
-				Q.Set(n+j,   k, c.Get(j, k))
-				Q.Set(n+j, n+k, d.Get(j, k))
+				Q.Set(j, k, a.At(j, k))
+				Q.Set(j, n+k, b.At(j, k))
+				Q.Set(n+j, k, c.At(j, k))
+				Q.Set(n+j, n+k, d.At(j, k))
 			}
 		}
-        	P = matrix.Product(matrix.Transpose(P), P)
-        	P = matrix.Product(P, P)
-        	P = matrix.Product(P, P)
-        	Q = matrix.Product(matrix.Transpose(Q), Q)
-        	Q = matrix.Product(Q, Q)
-        	Q = matrix.Product(Q, Q)
-        	v.Update(P.Trace())
-        	w.Update(Q.Trace())
+		PTP := matrix.NewDense(4*n, 4*n, nil)
+		PT := matrix.NewDense(4*n, n, nil)
+		PT.TCopy(P)
+		PTP.Mul(PT, P)
+		PTP.Mul(PTP, PTP)
+		PTP.Mul(PTP, PTP)
+		QT := matrix.NewDense(2*n, 2*n, nil)
+		QT.TCopy(Q)
+		Q.Mul(QT, Q)
+		Q.Mul(Q, Q)
+		Q.Mul(Q, Q)
+		v.Update(PTP.Trace())
+		w.Update(Q.Trace())
 	}
-	return v.PopulationStandardDeviation()/float64(v.Count())/v.Mean(), w.PopulationStandardDeviation()/float64(w.Count())/w.Mean()
+	return v.PopulationStandardDeviation() / float64(v.Count()) / v.Mean(), w.PopulationStandardDeviation() / float64(w.Count()) / w.Mean()
 }
 
 // randmatmul
 
-func randmatmul(n int) matrix.MatrixRO {
-	a := matrix.Zeros(n, n)
-	b := matrix.Zeros(n, n)
+func randmatmul(n int) *matrix.Dense {
+	a := matrix.NewDense(n, n, nil)
+	b := matrix.NewDense(n, n, nil)
 	for i := 0; i < n; i++ {
 		for k := 0; k < n; k++ {
 			a.Set(i, k, rand.Float64())
 			b.Set(i, k, rand.Float64())
 		}
 	}
-	return matrix.Product(a, b)
+	c := matrix.NewDense(n, n, nil)
+	c.Mul(a, b)
+	return c
 }
 
 // mandelbrot
@@ -136,8 +144,8 @@ func mandel(z complex128) int {
 
 func mandelperf() int {
 	mandel_sum := 0
-	for re := -20; re <= 5; re += 1 {
-		for im := -10; im <= 10; im += 1 {
+	for re := -20; re <= 5; re++ {
+		for im := -10; im <= 10; im++ {
 			m := mandel(complex(float64(re)/10, float64(im)/10))
 			mandel_sum += m
 		}
@@ -257,7 +265,7 @@ func main() {
 	for i := 0; i < 5; i++ {
 		t := time.Now()
 		c := randmatmul(1000)
-		assert(c.Get(0, 0) >= 0)
+		assert(c.At(0, 0) >= 0)
 		d := float64(time.Since(t).Seconds())
 		if d < tmin {
 			tmin = d
